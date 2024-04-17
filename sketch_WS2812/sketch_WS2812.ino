@@ -23,6 +23,10 @@
 #define PLAYER_ATTACK_RANGE  3
 #define PLAYER_ATTACK_MAX_DURATION_MS 2500
 #define PLAYER_ATTACK_INTERVAL_MS     2000
+#define LED_DIRECTION_FW 0b01
+#define LED_DIRECTION_BW 0b10
+#define LED_EFFECT_NONE   0b0
+#define LED_EFFECT_FLASH  0b1
 
 // Define structures for game objects
 typedef struct {
@@ -257,14 +261,20 @@ void openingSequence(GameState *pGameState) {
   }
 }
 
-void closingSequence(GameState *pGameState, CRGB explosionColor, int startIndex) {
+void closingSequence(GameState *pGameState, CRGB explosionColor, int startIndex, int direction, int effect) {
   static const int maxBrightness = 255;
   static const int fadeDuration = 500;  // Milliseconds
   static const int maxRadius = NUM_LEDS;      // Adjust the explosion radius as needed
+  static const int blinkFrequency = 5;
+  static int blinkToggleCounter = 0;
+  static bool blinkToggle = true;
 
   for (int radius = 0; radius <= maxRadius; radius++) {
     for (int i = 0; i < NUM_LEDS; i++) {
-      int distance = abs(i - startIndex);
+      int _distance = i - startIndex;
+      if(direction == LED_DIRECTION_FW && _distance < 0) continue;
+      if(direction == LED_DIRECTION_BW && _distance > 0) continue;
+      int distance = abs(_distance);
 
       if (distance <= radius) {
         int brightness = map(distance, 0, radius, maxBrightness, 0);
@@ -273,6 +283,14 @@ void closingSequence(GameState *pGameState, CRGB explosionColor, int startIndex)
       }
     }
 
+    if(effect == LED_EFFECT_FLASH) {
+      if(blinkToggleCounter++ % blinkFrequency == 0) blinkToggle = !blinkToggle;
+    } else {
+      blinkToggle = true;
+    }
+    if(!blinkToggle && radius < maxRadius) {
+      memset(pGameState->leds, 0, sizeof(pGameState->leds[0]) * NUM_LEDS);
+    }
     FastLED.show();
     delay(fadeDuration / (maxRadius + 1));
   }
@@ -360,12 +378,12 @@ void loop() {
 
     case GAME_OVER:
       mainLoopDelay = 0;                // No delay in the main loop
-      closingSequence(&gameState, CRGB(255, 0, 0), gameState.playerPosition);  // Execute the closing sequence for game over
+      closingSequence(&gameState, CRGB(255, 0, 0), gameState.playerPosition, LED_DIRECTION_FW | LED_DIRECTION_BW, LED_EFFECT_NONE);  // Execute the closing sequence for game over
       break;
 
     case GAME_WIN:
       mainLoopDelay = 0;                // No delay in the main loop
-      closingSequence(&gameState, CRGB(0, 255, 0), NUM_LEDS - 1);  // Execute the closing sequence for game win
+      closingSequence(&gameState, CRGB(0, 255, 0), NUM_LEDS - 1, LED_DIRECTION_FW | LED_DIRECTION_BW, LED_EFFECT_NONE);  // Execute the closing sequence for game win
       break;
 
     default:
