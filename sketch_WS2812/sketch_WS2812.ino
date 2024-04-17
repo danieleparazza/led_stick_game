@@ -25,11 +25,13 @@
 #define PLAYER_ATTACK_MAX_DURATION_MS 2500
 #define PLAYER_ATTACK_INTERVAL_MS     2000
 #define MAX_SEQUENCE_LENGTH 20
-#define NUM_CHEAT_CODES 0
+#define NUM_CHEAT_CODES 2
 #define LED_DIRECTION_FW 0b01
 #define LED_DIRECTION_BW 0b10
 #define LED_EFFECT_NONE   0b0
 #define LED_EFFECT_FLASH  0b1
+#define CHEAT_HADOUKEN  1
+#define CHEAT_HARAKIRI  2
 #define DEBUG_CHEAT false
 
 // Define structures for game objects
@@ -70,9 +72,13 @@ void(* resetFunc) (void) = 0;
 
 // Definisci i cheat codes come array di sequenze di tasti
 const int cheatCodes[NUM_CHEAT_CODES][MAX_SEQUENCE_LENGTH] = {
+    {UI_DN_PIN, UI_DN_PIN, UI_ATTACK_PIN, UI_BTN_RELEASED, UI_DN_PIN, UI_DN_PIN, UI_ATTACK_PIN, UI_BTN_RELEASED},
+    {UI_UP_PIN, UI_BTN_RELEASED, UI_DN_PIN, UI_BTN_RELEASED, UI_UP_PIN, UI_BTN_RELEASED, UI_DN_PIN, UI_BTN_RELEASED}
 };
 
 const int cheatActions[NUM_CHEAT_CODES] = {
+    CHEAT_HADOUKEN,
+    CHEAT_HARAKIRI
 };
 
 // Timer and LED state variables
@@ -454,7 +460,13 @@ void loop() {
     case GAME_CHEAT:
       mainLoopDelay = 0;                // No delay in the main loop      
       switch (gameState.currentCheatCode) {
-        default:
+        case CHEAT_HADOUKEN:
+          closingSequence(&gameState, CRGB(255, 0, 255), gameState.playerPosition, LED_DIRECTION_FW, LED_EFFECT_FLASH);
+          break;
+
+        case CHEAT_HARAKIRI:
+          if(gameState.playerPosition < 30) gameState.playerPosition = 30;
+          closingSequence(&gameState, CRGB(255, 0, 0), NUM_LEDS - 1, LED_DIRECTION_BW, LED_EFFECT_FLASH);
           break;
       }
       break;
