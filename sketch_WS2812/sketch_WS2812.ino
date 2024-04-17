@@ -29,7 +29,7 @@ typedef struct {
   int position;
   int originalPosition;
   int movementRange;
-  int8_t movementDirection;
+  int8_t movementDirection = 1;
   unsigned int enemyMovementTimer;
   unsigned int attackTimer;
   unsigned int attackTiming;
@@ -44,10 +44,10 @@ typedef struct {
   uint8_t currentAttackRange;
   CRGB leds[NUM_LEDS];
   CRGB led_off;
-  CRGB led_enemy;
+  CRGB led_enemy = CRGB(255, 0, 0);;
   CRGB led_player;
-  CRGB led_attack;
-  CRGB led_trophy;
+  CRGB led_attack = CRGB(255, 0, 255);
+  CRGB led_trophy = CRGB(0, 255, 0);
   unsigned int playerBreatheTimer;
   unsigned int uiAttackTimer;
   bool newAttackAvailable;
@@ -179,7 +179,7 @@ void playerBreathe(GameState *pGameState) {
   pGameState->playerBreatheTimer = 10;
 
   if (pGameState->led_player.r <= 80) pGameState->playerBreatheDirection = 1;
-  if (pGameState->led_player.r >= 255) pGameState->playerBreatheDirection = -1;
+  if (pGameState->led_player.r >= 248) pGameState->playerBreatheDirection = -1;
 
   pGameState->led_player.r += 8 * pGameState->playerBreatheDirection;
   pGameState->led_player.g += 8 * pGameState->playerBreatheDirection;
