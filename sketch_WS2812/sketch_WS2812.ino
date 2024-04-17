@@ -20,13 +20,17 @@
 #define GAME_OVER            2
 #define GAME_WIN             3
 #define GAME_END             4
+#define GAME_CHEAT           5
 #define PLAYER_ATTACK_RANGE  3
 #define PLAYER_ATTACK_MAX_DURATION_MS 2500
 #define PLAYER_ATTACK_INTERVAL_MS     2000
+#define MAX_SEQUENCE_LENGTH 20
+#define NUM_CHEAT_CODES 0
 #define LED_DIRECTION_FW 0b01
 #define LED_DIRECTION_BW 0b10
 #define LED_EFFECT_NONE   0b0
 #define LED_EFFECT_FLASH  0b1
+#define DEBUG_CHEAT false
 
 // Define structures for game objects
 typedef struct {
@@ -59,14 +63,25 @@ typedef struct {
   Enemy enemies[NUM_ENEMIES];
   int currentEnemy;
   bool gameOver;
+  int currentCheatCode;
 } GameState;
 
 void(* resetFunc) (void) = 0;
+
+// Definisci i cheat codes come array di sequenze di tasti
+const int cheatCodes[NUM_CHEAT_CODES][MAX_SEQUENCE_LENGTH] = {
+};
+
+const int cheatActions[NUM_CHEAT_CODES] = {
+};
 
 // Timer and LED state variables
 unsigned int userLedToggleTimer;
 int userLedState = HIGH;
 unsigned int userLedBlinkInterval;
+int inputBuffer[MAX_SEQUENCE_LENGTH];
+int inputBufferIndex = 0;
+int cheatResetTimer = 0;
 
 GameState gameState;
 
@@ -115,10 +130,26 @@ void initializeGame(GameState *pGameState) {
 }
 
 void handleUserInput(GameState *pGameState) {
+  static int buttonPressMask = 0;
+  int buttonPressMaskNew = 0;
   int btnUp = digitalRead(UI_UP_PIN);
   int btnDn = digitalRead(UI_DN_PIN);
   int btnAtt = digitalRead(UI_ATTACK_PIN);
 
+  buttonPressMaskNew = ((btnUp & 1) << 0) 
+                      | ((btnDn & 1) << 1) 
+                      | ((btnAtt & 1) << 2) ;
+
+  if(buttonPressMaskNew != buttonPressMask) {
+    cheatResetTimer = 2000;
+    buttonPressMask = buttonPressMaskNew;
+    inputBuffer[inputBufferIndex] = (btnUp == HIGH) ? UI_UP_PIN :
+                                    (btnDn == HIGH) ? UI_DN_PIN :
+                                    (btnAtt == HIGH) ? UI_ATTACK_PIN : 0;
+    if(DEBUG_CHEAT) Serial.println(inputBuffer[inputBufferIndex], HEX);
+    inputBufferIndex = (inputBufferIndex + 1) % MAX_SEQUENCE_LENGTH;
+  }
+  
   if (btnUp == HIGH && btnDn == LOW) {
     pGameState->uiVerticalDirection = UI_VDIR_UP;
   } else if (btnUp == LOW && btnDn == HIGH) {
@@ -239,6 +270,7 @@ void manageTimers(GameState *pGameState) {
   if (pGameState->uiAttackTimer) pGameState->uiAttackTimer--;
   if (pGameState->enemies[pGameState->currentEnemy].enemyMovementTimer) pGameState->enemies[pGameState->currentEnemy].enemyMovementTimer--;
   if (userLedToggleTimer) userLedToggleTimer--;
+  if (cheatResetTimer) cheatResetTimer--;
 }
 
 void openingSequence(GameState *pGameState) {
@@ -316,8 +348,6 @@ void setupSysTick() {
 // ogni 1 ms
 ISR(TIMER1_COMPA_vect) {
   manageTimers(&gameState);
-
-  if (userLedToggleTimer) userLedToggleTimer--;
 }
 
 void setupSysGPIO() {
@@ -343,11 +373,56 @@ void setup() {
 }
 
 void manageCoinButton(GameState * pGameState) {
+  static bool cheatCheckDebounce;
   int btnCoin = digitalRead(UI_COIN_PIN);
-  pGameState->uiCoinInserted = (btnCoin == HIGH);
-  digitalWrite(COIN_LED_PIN, userLedBlinkInterval && (pGameState->gamePhase == GAME_END));
+  pGameState->uiCoinInserted = (btnCoin == HIGH) && (pGameState->gamePhase == GAME_END);
+  digitalWrite(COIN_LED_PIN, userLedBlinkInterval);
   if (pGameState->uiCoinInserted) {
     resetFunc();
+  }
+
+  if(btnCoin == LOW) {
+    cheatCheckDebounce = false;
+
+  } else if(btnCoin == HIGH && !cheatCheckDebounce) {
+    cheatCheckDebounce = true;
+    for (int i = 0; i < NUM_CHEAT_CODES; ++i) {
+      int *cheatCode = cheatCodes[i];
+      int cheatLength = 0;
+      while (cheatLength < MAX_SEQUENCE_LENGTH && cheatCode[cheatLength] != -1) {
+        ++cheatLength;
+      }
+
+      if(DEBUG_CHEAT) {
+        Serial.println("Inserted cheat:");
+        for(int c=0; c<cheatLength; c++) {
+          Serial.print(inputBuffer[c], HEX);
+          Serial.print("-");
+        }
+        Serial.println();
+        Serial.println("Compared to cheat:");
+        for(int c=0; c<cheatLength; c++) {
+          Serial.print(cheatCode[c], HEX);
+          Serial.print("-");
+        }
+        Serial.println();
+      }
+      if(memcmp(cheatCode, inputBuffer, cheatLength) == 0) {
+        Serial.println("Cheat ok");
+        pGameState->currentCheatCode = cheatActions[i];
+        pGameState->gamePhase = GAME_CHEAT;
+      } else {
+        Serial.println("Cheat ko");
+      }
+    }
+
+    cheatResetTimer = 0;
+  }
+  
+  if(inputBufferIndex > 0 && cheatResetTimer == 0) {
+    if(DEBUG_CHEAT) Serial.println("Cheat sequence reset");
+    memset(inputBuffer, 0, sizeof(MAX_SEQUENCE_LENGTH));
+    inputBufferIndex = 0;
   }
 }
 
@@ -374,6 +449,14 @@ void loop() {
       enemyMovement(&gameState);        // Manage enemy movement
       handleGameOver(&gameState);       // Check for game over conditions
       drawLeds(&gameState);             // Update and draw the LEDs to display the game state
+      break;
+
+    case GAME_CHEAT:
+      mainLoopDelay = 0;                // No delay in the main loop      
+      switch (gameState.currentCheatCode) {
+        default:
+          break;
+      }
       break;
 
     case GAME_OVER:
